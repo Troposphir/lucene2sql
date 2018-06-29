@@ -40,7 +40,6 @@ fn main() {
         .map_err(Error::Deserialization)
         .unwrap();
 
-    // let query =  b"(draft:false AND deleted:false AND version:2 AND xgms:1) AND ct:[1528766537000 TO 1529976137000] potato land";
     let sql = parser::query()
         .parse(query.as_bytes())
         .map_err(Error::Parse)
