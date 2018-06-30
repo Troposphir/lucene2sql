@@ -22,6 +22,7 @@ fn space<'a>() -> Combinator<impl Parser<'a, u8, Output=()>> {
         .discard()
 }
 
+
 fn phrase<'a>() -> Combinator<impl Parser<'a, u8, Output=String>> {
     let escape_sequence = sym(b'\\') * (
         sym(b'\\')
@@ -39,16 +40,19 @@ fn phrase<'a>() -> Combinator<impl Parser<'a, u8, Output=String>> {
     string.map(|strings| strings.concat())
 }
 
+
 fn single_term<'a>() -> Combinator<impl Parser<'a, u8, Output=String>> {
     (is_a(alphanum) | one_of(b"-_.")).repeat(1..)
         .collect()
         .convert(|x| String::from_utf8(x.to_vec()))
 }
 
+
 fn text<'a>() -> Combinator<impl Parser<'a, u8, Output=Value>> {
     (phrase() | single_term())
         .map(Value::Text)
 }
+
 
 fn integer<'a>() -> Combinator<impl Parser<'a, u8, Output=i64>> {
     is_a(digit).repeat(0..)
@@ -56,10 +60,12 @@ fn integer<'a>() -> Combinator<impl Parser<'a, u8, Output=i64>> {
         .convert(|s| i64::from_str(&s))
 }
 
+
 fn boolean<'a>() -> Combinator<impl Parser<'a, u8, Output=bool>> {
     seq(b"true").map(|_| true)
     | seq(b"false").map(|_| false)
 }
+
 
 fn range<'a>() -> Combinator<impl Parser<'a, u8, Output=Value>> {
     let open =
@@ -83,12 +89,14 @@ fn range<'a>() -> Combinator<impl Parser<'a, u8, Output=Value>> {
         ))
 }
 
+
 fn value<'a>() -> Combinator<impl Parser<'a, u8, Output=Value>> {
     range()
     | boolean().map(Value::Boolean)
     | integer().map(Value::Integer)
     | text()
 }
+
 
 fn operator<'a>() -> Combinator<impl Parser<'a, u8, Output=Operator>> {
     let core =
@@ -99,6 +107,7 @@ fn operator<'a>() -> Combinator<impl Parser<'a, u8, Output=Operator>> {
     space() * core - space()
 }
 
+
 fn field<'a>() -> Combinator<impl Parser<'a, u8, Output=Term>> {
     (single_term() - sym(b':') + value())
         .map(|(k, v)| Term::Named {
@@ -107,13 +116,16 @@ fn field<'a>() -> Combinator<impl Parser<'a, u8, Output=Term>> {
         })
 }
 
+
 fn default<'a>() -> Combinator<impl Parser<'a, u8, Output=Term>> {
     text().map(Term::Default)
 }
 
+
 fn term<'a>() -> Combinator<impl Parser<'a, u8, Output=Term>> {
     field() | default()
 }
+
 
 fn many<'a>() -> Combinator<impl Parser<'a, u8, Output=Term>> {
     (space() * comb(partial_expr) + (operator() + comb(expr)).repeat(1..) - space())
@@ -128,6 +140,7 @@ fn many<'a>() -> Combinator<impl Parser<'a, u8, Output=Term>> {
         )
 }
 
+
 fn group<'a>() -> Combinator<impl Parser<'a, u8, Output=Term>> {
     (sym(b'(') * space() * comb(expr) - space() - sym(b')'))
         .map(|term| match term {
@@ -141,15 +154,18 @@ fn group<'a>() -> Combinator<impl Parser<'a, u8, Output=Term>> {
         })
 }
 
+
 fn partial_expr<'a>(input: &'a [u8], start: usize) -> pom::Result<(Term, usize)> {
     (group() | term()).0.parse(input, start)
 }
+
 
 fn expr<'a>(input: &'a [u8], start: usize) -> pom::Result<(Term, usize)> {
     let opts = many() | comb(partial_expr);
 
     opts.0.parse(input, start)
 }
+
 
 pub fn query<'a>() -> Combinator<impl Parser<'a, u8, Output=Term>> {
     space() * comb(expr) - space() - end()

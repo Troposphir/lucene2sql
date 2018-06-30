@@ -1,6 +1,12 @@
-use std::collections::{
-    HashMap,
-};
+use std::collections::HashMap;
+
+use serde_json;
+
+
+pub type ExpressionRuleset = HashMap<String, Vec<(
+    serde_json::Value,
+    String,
+)>>;
 
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -23,6 +29,7 @@ pub enum Term {
         operator: Operator,
         grouping: bool,
     },
+    Expression(String),
 }
 
 
@@ -49,6 +56,29 @@ pub struct Boundary {
 }
 
 
+fn match_expression(ruleset: &ExpressionRuleset, key: &str, value: &Value) -> Option<String> {
+    let rules = ruleset.get(key)?;
+
+    for (case, expression) in rules {
+        let found = match (case, value) {
+            (serde_json::Value::Number(a), Value::Integer(b)) => a
+                .as_i64()
+                .map(|a| a == *b)
+                .unwrap_or(false),
+            (serde_json::Value::Bool(a), Value::Boolean(b)) => *a == *b,
+            (serde_json::Value::String(ref a), Value::Text(ref b)) => a == b,
+            _ => false,
+        };
+
+        if found {
+            return Some(expression.to_string());
+        }
+    }
+
+    None
+}
+
+
 pub fn deanonymize(tree: Term, default_fields: &[impl ToString]) -> Term {
     match tree {
         Term::Default(ref value) => default_fields.iter()
@@ -70,6 +100,7 @@ pub fn deanonymize(tree: Term, default_fields: &[impl ToString]) -> Term {
     }
 }
 
+
 pub fn rename(tree: Term, renames: &HashMap<String, String>) -> Term {
     match tree {
         Term::Named {key, value} => match renames.get(&key) {
@@ -82,6 +113,17 @@ pub fn rename(tree: Term, renames: &HashMap<String, String>) -> Term {
         _ => tree,
     }
 }
+
+
+pub fn replace_expressions(tree: Term, ruleset: &ExpressionRuleset) -> Term {
+    match tree {
+        Term::Named {key, value} => match_expression(ruleset, &key, &value)
+            .map(Term::Expression)
+            .unwrap_or(Term::Named {key, value}),
+        _ => tree,
+    }
+}
+
 
 pub fn transform(tree: Term, visitor: &impl Fn(Term) -> Term) -> Term {
     match tree {

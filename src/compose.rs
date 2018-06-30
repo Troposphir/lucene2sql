@@ -18,6 +18,7 @@ struct QueryContext {
     values: HashMap<String, JsonValue>,
 }
 
+
 impl QueryContext {
     fn add_value(&mut self, value: JsonValue) -> String {
         let key = format!(":v{}", self.values.len());
@@ -25,6 +26,7 @@ impl QueryContext {
         key
     }
 }
+
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Query {
@@ -78,6 +80,7 @@ fn value_to_condition(context: &mut QueryContext, key: &str, value: &Value) -> S
 
 fn sql_reducer(tree: &Term, context: &mut QueryContext) -> Result<String, String> {
     Ok(match tree {
+        Term::Expression(expr) => expr.to_string(),
         Term::Combined {left, right, operator, grouping} => {
             match (sql_reducer(&*left, context), sql_reducer(&*right, context)) {
                 (Ok(left), Ok(right)) => {

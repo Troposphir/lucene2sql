@@ -19,10 +19,13 @@ mod ast;
 #[derive(Debug, Serialize, Deserialize)]
 struct InputCommand {
     query: String,
-    allowed_fields: Option<HashSet<String>>,
-    default_fields: Vec<String>,
-    renames: HashMap<String, String>,
     table: String,
+    default_fields: Vec<String>,
+    allowed_fields: Option<HashSet<String>>,
+    #[serde(default)]
+    renames: HashMap<String, String>,
+    #[serde(default)]
+    expressions: ast::ExpressionRuleset,
 }
 
 
@@ -37,10 +40,11 @@ enum Error {
 fn main() {
     let InputCommand {
         query,
+        table,
         default_fields,
         allowed_fields,
         renames,
-        table,
+        expressions,
     } = serde_json::from_reader(stdin())
         .map_err(Error::Deserialization)
         .unwrap();
@@ -60,6 +64,13 @@ fn main() {
             &|term| ast::rename(
                 term,
                 &renames,
+            ),
+        ))
+        .map(|tree| ast::transform(
+            tree,
+            &|term| ast::replace_expressions(
+                term,
+                &expressions,
             ),
         ))
         .map(|tree| compose::to_sql(
