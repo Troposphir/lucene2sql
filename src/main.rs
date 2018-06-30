@@ -33,6 +33,7 @@ struct InputCommand {
 enum Error {
     Serialization(serde_json::Error),
     Parse(pom::Error),
+    Composition(String),
     Deserialization(serde_json::Error),
 }
 
@@ -73,11 +74,11 @@ fn main() {
                 &expressions,
             ),
         ))
-        .map(|tree| compose::to_sql(
+        .and_then(|tree| compose::to_sql(
             &tree,
             table.as_str(),
             allowed_fields,
-        ))
+        ).map_err(Error::Composition))
         .unwrap();
 
     let output = serde_json::to_string(&sql)
