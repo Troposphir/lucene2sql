@@ -5,7 +5,10 @@ extern crate serde;
 extern crate pom;
 
 use std::io::stdin;
-use std::collections::HashSet;
+use std::collections::{
+    HashSet,
+    HashMap,
+};
 
 
 mod compose;
@@ -18,6 +21,7 @@ struct InputCommand {
     query: String,
     allowed_fields: Option<HashSet<String>>,
     default_fields: Vec<String>,
+    renames: HashMap<String, String>,
     table: String,
 }
 
@@ -35,6 +39,7 @@ fn main() {
         query,
         default_fields,
         allowed_fields,
+        renames,
         table,
     } = serde_json::from_reader(stdin())
         .map_err(Error::Deserialization)
@@ -48,6 +53,13 @@ fn main() {
             &|term| ast::deanonymize(
                 term,
                 default_fields.as_slice(),
+            ),
+        ))
+        .map(|tree| ast::transform(
+            tree,
+            &|term| ast::rename(
+                term,
+                &renames,
             ),
         ))
         .map(|tree| compose::to_sql(

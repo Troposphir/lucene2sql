@@ -1,3 +1,8 @@
+use std::collections::{
+    HashMap,
+};
+
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Operator {
     And,
@@ -65,6 +70,18 @@ pub fn deanonymize(tree: Term, default_fields: &[impl ToString]) -> Term {
     }
 }
 
+pub fn rename(tree: Term, renames: &HashMap<String, String>) -> Term {
+    match tree {
+        Term::Named {key, value} => match renames.get(&key) {
+            Some(renamed) => Term::Named {
+                key: renamed.clone(),
+                value,
+            },
+            None => Term::Named {key, value},
+        },
+        _ => tree,
+    }
+}
 
 pub fn transform(tree: Term, visitor: &impl Fn(Term) -> Term) -> Term {
     match tree {

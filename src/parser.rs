@@ -108,7 +108,7 @@ fn field<'a>() -> Combinator<impl Parser<'a, u8, Output=Term>> {
 }
 
 fn default<'a>() -> Combinator<impl Parser<'a, u8, Output=Term>> {
-    value().map(Term::Default)
+    text().map(Term::Default)
 }
 
 fn term<'a>() -> Combinator<impl Parser<'a, u8, Output=Term>> {
