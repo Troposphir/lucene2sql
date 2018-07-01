@@ -131,6 +131,14 @@ fn sql_reducer<'a>(
 
             value_to_condition(&key, &value)
         },
+        Term::Negated(inner) => return sql_reducer(&*inner, context)
+            .map(|mut inner_parts| {
+                let mut parts = vec![Part::String("(NOT (")];
+                parts.append(&mut inner_parts);
+                parts.push(Part::String("))"));
+
+                parts
+            }),
         _ => panic!("All terms must be named to generate a SQL query."),
     })
 }

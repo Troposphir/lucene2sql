@@ -30,6 +30,7 @@ pub enum Term {
         grouping: bool,
     },
     Expression(String),
+    Negated(Box<Term>),
 }
 
 

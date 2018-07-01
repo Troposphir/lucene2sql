@@ -155,8 +155,15 @@ fn group<'a>() -> Combinator<impl Parser<'a, u8, Output=Term>> {
 }
 
 
+fn negated<'a>() -> Combinator<impl Parser<'a, u8, Output=Term>> {
+    (sym(b'-') * (group() | term()))
+        .map(Box::new)
+        .map(Term::Negated)
+}
+
+
 fn partial_expr<'a>(input: &'a [u8], start: usize) -> pom::Result<(Term, usize)> {
-    (group() | term()).0.parse(input, start)
+    (negated() | group() | term()).0.parse(input, start)
 }
 
 
