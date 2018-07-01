@@ -136,26 +136,6 @@ fn sql_reducer<'a>(
 }
 
 
-fn push_fields_list(query: &mut String, fields: &Option<HashSet<String>>) {
-    match fields {
-        Some(ref fields) => {
-            query.push('`');
-
-            for (i, field) in fields.iter().enumerate() {
-                if i > 0 {
-                    query.push_str("`, `");
-                }
-
-                query.push_str(field);
-            }
-
-            query.push('`');
-        },
-        None => query.push('*'),
-    }
-}
-
-
 pub fn to_sql(
     tree: &Term,
     table: &str,
@@ -168,13 +148,10 @@ pub fn to_sql(
     let parts = sql_reducer(tree, &context)?;
 
     let mut query = Query {
-        body: "SELECT ".to_string(),
+        body: "SELECT * FROM `".to_string(),
         params: Vec::new(),
     };
 
-    push_fields_list(&mut query.body, &context.allowed_fields);
-
-    query.body.push_str(" FROM `");
     query.body.push_str(table);
     query.body.push_str("` WHERE ");
 
