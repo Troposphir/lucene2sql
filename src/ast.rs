@@ -68,6 +68,7 @@ fn match_expression(ruleset: &ExpressionRuleset, key: &str, value: &Value) -> Op
                 .unwrap_or(false),
             (serde_json::Value::Bool(a), Value::Boolean(b)) => *a == *b,
             (serde_json::Value::String(ref a), Value::Text(ref b)) => a == b,
+            (serde_json::Value::Null, _) => true,
             _ => false,
         };
 
