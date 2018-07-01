@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::collections::HashMap;
 
 use serde_json::Value as JsonValue;
 
@@ -15,87 +14,105 @@ use ast::{
 #[derive(Debug)]
 struct QueryContext {
     allowed_fields: Option<HashSet<String>>,
-    values: HashMap<String, JsonValue>,
 }
 
 
-impl QueryContext {
-    fn add_value(&mut self, value: JsonValue) -> String {
-        let key = format!(":v{}", self.values.len());
-        self.values.insert(key.clone(), value);
-        key
-    }
+#[derive(Debug)]
+pub enum Part<'a> {
+    String(&'a str),
+    Parameter(JsonValue),
 }
 
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Query {
     pub body: String,
-    pub named_params: HashMap<String, JsonValue>,
+    pub params: Vec<JsonValue>,
 }
 
 
-fn value_to_condition(context: &mut QueryContext, key: &str, value: &Value) -> String {
+fn value_to_condition<'a>(
+    key: &'a str,
+    value: &'a Value,
+) -> Vec<Part<'a>> {
+    let mut parts = Vec::new();
+
     let right_hand_side = match value {
         Value::Integer(value) => JsonValue::Number((*value).into()),
         Value::Boolean(value) => JsonValue::Bool(*value),
-        Value::Text(value) => return format!(
-            "`{}` LIKE CONCAT('%', {}, '%')",
-            key,
-            context.add_value(JsonValue::String(value.to_string())),
-        ),
+        Value::Text(value) => {
+            parts.push(Part::String("`"));
+            parts.push(Part::String(key));
+            parts.push(Part::String("` LIKE CONCAT('%', "));
+            parts.push(Part::Parameter(JsonValue::String(value.to_string())));
+            parts.push(Part::String(", '%')"));
+            return parts;
+        },
         Value::Range(
             Boundary { value: start, kind: start_kind },
             Boundary { value: end, kind: end_kind },
         ) => {
-            let start_op = match start_kind {
+            parts.push(Part::String("(`"));
+            parts.push(Part::String(key));
+            parts.push(Part::String("` "));
+            parts.push(Part::String(match start_kind {
                 BoundaryKind::Exclusive => ">",
                 BoundaryKind::Inclusive => ">=",
-            };
-
-            let end_op = match end_kind {
+            }));
+            parts.push(Part::String(" "));
+            parts.push(Part::Parameter(JsonValue::Number((*start).into())));
+            parts.push(Part::String(" AND `"));
+            parts.push(Part::String(key));
+            parts.push(Part::String("` "));
+            parts.push(Part::String(match end_kind {
                 BoundaryKind::Exclusive => "<",
                 BoundaryKind::Inclusive => "<=",
-            };
-
-            return format!(
-                "(`{}` {} {} AND `{}` {} {})",
-                key,
-                start_op,
-                context.add_value(JsonValue::Number((*start).into())),
-                key,
-                end_op,
-                context.add_value(JsonValue::Number((*end).into())),
-            );
+            }));
+            parts.push(Part::String(" "));
+            parts.push(Part::Parameter(JsonValue::Number((*end).into())));
+            return parts;
         },
     };
 
-    format!(
-        "`{}` = {}",
-        key,
-        context.add_value(right_hand_side),
-    )
+    parts.push(Part::String("`"));
+    parts.push(Part::String(key));
+    parts.push(Part::String("` = "));
+    parts.push(Part::Parameter(right_hand_side));
+    parts
 }
 
 
-fn sql_reducer(tree: &Term, context: &mut QueryContext) -> Result<String, String> {
+fn sql_reducer<'a>(
+    tree: &'a Term,
+    context: &'a QueryContext,
+) -> Result<Vec<Part<'a>>, String> {
     Ok(match tree {
-        Term::Expression(expr) => expr.to_string(),
+        Term::Expression(expr) => vec![Part::String(expr)],
         Term::Combined {left, right, operator, grouping} => {
             match (sql_reducer(&*left, context), sql_reducer(&*right, context)) {
-                (Ok(left), Ok(right)) => {
-                    let operator = match operator {
-                        Operator::Or => "OR",
-                        Operator::And => "AND",
-                    };
-
-                    let inner = format!("{} {} {}", left, operator, right);
+                (Ok(mut left), Ok(mut right)) => {
+                    let mut parts = Vec::new();
 
                     if *grouping {
-                        format!("({})", inner)
-                    } else {
-                        inner
+                        parts.push(Part::String("("));
                     }
+
+                    parts.append(&mut left);
+
+                    parts.push(Part::String(" "));
+                    parts.push(Part::String(match operator {
+                        Operator::Or => "OR",
+                        Operator::And => "AND",
+                    }));
+                    parts.push(Part::String(" "));
+
+                    parts.append(&mut right);
+
+                    if *grouping {
+                        parts.push(Part::String(")"));
+                    }
+
+                    parts
                 }
                 (Err(key), Ok(_)) => return Err(key),
                 (Ok(_), Err(key)) => return Err(key),
@@ -111,10 +128,31 @@ fn sql_reducer(tree: &Term, context: &mut QueryContext) -> Result<String, String
             if !whitelisted {
                 return Err(key.to_string());
             }
-            value_to_condition(context, &key, &value)
+
+            value_to_condition(&key, &value)
         },
         _ => panic!("All terms must be named to generate a SQL query."),
     })
+}
+
+
+fn push_fields_list(query: &mut String, fields: &Option<HashSet<String>>) {
+    match fields {
+        Some(ref fields) => {
+            query.push('`');
+
+            for (i, field) in fields.iter().enumerate() {
+                if i > 0 {
+                    query.push_str("`, `");
+                }
+
+                query.push_str(field);
+            }
+
+            query.push('`');
+        },
+        None => query.push('*'),
+    }
 }
 
 
@@ -123,31 +161,34 @@ pub fn to_sql(
     table: &str,
     allowed_fields: Option<HashSet<String>>,
 ) -> Result<Query, String> {
-    let mut context = QueryContext {
+    let context = QueryContext {
         allowed_fields,
-        values: HashMap::new(),
     };
 
-    let conditions = sql_reducer(tree, &mut context);
-    // TODO: Reduce allocations here
-    let joined_fields = match context.allowed_fields {
-        Some(allowed_fields) => format!(
-            "`{}`",
-            allowed_fields.into_iter()
-                .collect::<Vec<String>>()
-                .join("`, `"),
-        ),
-        None => "*".to_string(),
-    };
-    let values = context.values;
+    let parts = sql_reducer(tree, &context)?;
 
-    conditions.map(|conditions| Query {
-        body: format!(
-            "SELECT {} FROM `{}` WHERE {};",
-            joined_fields,
-            table,
-            conditions,
-        ),
-        named_params: values,
-    })
+    let mut query = Query {
+        body: "SELECT ".to_string(),
+        params: Vec::new(),
+    };
+
+    push_fields_list(&mut query.body, &context.allowed_fields);
+
+    query.body.push_str(" FROM `");
+    query.body.push_str(table);
+    query.body.push_str("` WHERE ");
+
+    for part in parts {
+        match part {
+            Part::String(string) => query.body.push_str(string),
+            Part::Parameter(value) => {
+                query.body.push_str("?");
+                query.params.push(value);
+            }
+        }
+    }
+
+    query.body.push(';');
+
+    Ok(query)
 }
