@@ -13,6 +13,12 @@ Sequential terms are `OR`ed together. Additionally, explicit `OR` and `AND`s are
 
 It generates correctly typed values for booleans, integers, and otherwise, strings. All strings are searched through `LIKE` with leading and trailing wildcards.
 
+## Purpose
+
+This was developed for the purpose of being used internally in the main [Troposphir](https://github.com/Troposphir/troposphir), hence why it uses standard I/O for input instead of command-line or similar.
+
+Other Lucene features such as weights and fuzzy searches are unimplemented due to not being possible in naive SQL, and/or not used in the game's search feature.
+
 ## Input
 
 This program expects a JSON file in the standard input with the following properties:
