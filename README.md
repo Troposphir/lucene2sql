@@ -1,4 +1,6 @@
-Converts (a subset of) the Lucene query syntaxt to SQL queries.
+# lucene2sql
+
+Converts (a subset of) the Lucene query syntax to SQL queries.
 
 Currently, it supports the following features:
 
