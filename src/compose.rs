@@ -70,6 +70,7 @@ fn value_to_condition<'a>(
             }));
             parts.push(Part::String(" "));
             parts.push(Part::Parameter(JsonValue::Number((*end).into())));
+            parts.push(Part::String(")"));
             return parts;
         },
     };
